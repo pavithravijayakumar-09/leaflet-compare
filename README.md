@@ -10,6 +10,12 @@ The app is **German by default**. The **English** button in the header translate
 
 > ⚠️ **Demo data only.** All medicines, leaflet texts, codes and manufacturers are fictional. Nothing here is real medical information or medical advice.
 
+## Try it online
+
+**Live prototype:** <https://pavithravijayakumar-09.github.io/leaflet-compare/>
+
+To publish a new version, run `npm run deploy`. It runs the tests, builds the app and pushes the `dist/` folder to the `gh-pages` branch, which GitHub Pages serves (see `scripts/deploy-pages.sh`). Open the link on a phone to try the camera scanner and the blister photo. The site uses HTTPS, which browsers require before they allow the camera.
+
 ## Run it locally
 
 You need **Node.js 20 or newer**.
