@@ -65,7 +65,9 @@ export function compareLeaflets(
   return changes
 }
 
+/** Changes between the previous and current leaflet. Empty if there is no previous version. */
 export function compareMedication(med: Medication): LeafletChange[] {
+  if (!med.previous) return []
   return compareLeaflets(med.previous, med.current, med.explanations)
 }
 

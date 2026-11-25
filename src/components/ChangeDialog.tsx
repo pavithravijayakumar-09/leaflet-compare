@@ -3,11 +3,13 @@ import type { Medication } from '../data/types'
 import { wordDiff, type LeafletChange } from '../lib/compare'
 import { useI18n } from '../i18n/LanguageContext'
 import { links } from '../lib/router'
-import { ChangeBadge, CloseIcon, DocIcon, InfoIcon, SafetyNote } from './ui'
+import { btn, ChangeBadge, CloseIcon, DocIcon, InfoIcon, PharmacyButton, SafetyNote, SpeakerIcon } from './ui'
+import { useSpeech } from '../speech/SpeechContext'
 
 /** Modal with previous text, current text, inline word diff, explanation and links to the original leaflet. */
 export function ChangeDialog({ med, change, onClose }: { med: Medication; change: LeafletChange | null; onClose: () => void }) {
   const { t, formatDate } = useI18n()
+  const speech = useSpeech()
   const ref = useRef<HTMLDialogElement>(null)
   const [showDiff, setShowDiff] = useState(true)
 
@@ -51,7 +53,7 @@ export function ChangeDialog({ med, change, onClose }: { med: Medication; change
           <div className="grid gap-3 sm:grid-cols-2">
             <TextBox
               title={t.dialog.previousText}
-              meta={t.dialog.versionMeta(med.previous.version, formatDate(med.previous.publishedOn))}
+              meta={t.dialog.versionMeta(med.previous?.version ?? '', med.previous ? formatDate(med.previous.publishedOn) : '')}
               text={change.previousText}
               emptyText={t.dialog.emptyPrevious}
               variant="previous"
@@ -120,6 +122,27 @@ export function ChangeDialog({ med, change, onClose }: { med: Medication; change
               )}
             </div>
           </section>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!speech.supported}
+              onClick={() =>
+                speech.play(
+                  [
+                    { id: 'd-exp', text: change.explanation ?? t.dialog.noExplanation },
+                    ...(change.previousText ? [{ id: 'd-prev', text: `${t.dialog.speakPrevious} ${change.previousText}` }] : []),
+                    ...(change.currentText ? [{ id: 'd-curr', text: `${t.dialog.speakCurrent} ${change.currentText}` }] : []),
+                  ],
+                  { key: `change:${change.id}`, title: t.dialog.readAloud },
+                )
+              }
+              className={btn.small}
+            >
+              <SpeakerIcon className="size-4" /> {t.dialog.readAloud}
+            </button>
+            <PharmacyButton className={btn.small} />
+          </div>
 
           <SafetyNote compact />
         </div>

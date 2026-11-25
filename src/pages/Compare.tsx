@@ -3,13 +3,15 @@ import type { Medication } from '../data/types'
 import { compareMedication, countByType, groupBySection, type ChangeType, type LeafletChange } from '../lib/compare'
 import { useI18n } from '../i18n/LanguageContext'
 import { links } from '../lib/router'
-import { BackLink, Card, ChangeBadge, ChevronRight, changeStyle, DocIcon, SafetyNote } from '../components/ui'
+import { BackLink, btn, Card, ChangeBadge, ChevronRight, changeStyle, DocIcon, PharmacyButton, QuestionIcon, SafetyNote, SpeakerIcon } from '../components/ui'
+import { useSpeech } from '../speech/SpeechContext'
 import { ChangeDialog } from '../components/ChangeDialog'
 
 type Filter = 'all' | ChangeType
 
 export function Compare({ med }: { med: Medication }) {
   const { t } = useI18n()
+  const speech = useSpeech()
   const changes = useMemo(() => compareMedication(med), [med])
   const counts = countByType(changes)
   const [filter, setFilter] = useState<Filter>('all')
@@ -19,6 +21,23 @@ export function Compare({ med }: { med: Medication }) {
 
   const visible = filter === 'all' ? changes : changes.filter((c) => c.type === filter)
   const groups = groupBySection(visible)
+
+  if (!med.previous) {
+    return (
+      <div className="space-y-6">
+        <BackLink href={links.overview(med.id)}>{t.compare.back(med.name)}</BackLink>
+        <h1 tabIndex={-1} className="text-2xl font-bold">{t.compare.title(med.name)}</h1>
+        <Card className="p-6 text-slate-700">{t.compare.noPrevious}</Card>
+      </div>
+    )
+  }
+
+  // Read every change aloud: section, kind of change and the plain-language explanation.
+  const readAll = () =>
+    speech.play(
+      changes.map((c) => ({ id: `chg:${c.id}`, text: `${c.sectionTitle.replace(/^\d+\.\s*/, '')}. ${t.changeTypes[c.type].label}. ${c.explanation ?? ''}` })),
+      { key: `changes:${med.id}`, title: t.compare.readAllChanges },
+    )
 
   return (
     <div className="space-y-6">
@@ -51,6 +70,16 @@ export function Compare({ med }: { med: Medication }) {
           ))}
         </div>
       </section>
+
+      <div className="flex flex-wrap gap-3">
+        <button type="button" onClick={readAll} disabled={!speech.supported} className={btn.secondary}>
+          <SpeakerIcon /> {t.compare.readAllChanges}
+        </button>
+        <a href={links.ask(med.id)} className={btn.secondary}>
+          <QuestionIcon /> {t.compare.askAbout}
+        </a>
+        <PharmacyButton />
+      </div>
 
       {/* Legend */}
       <details className="rounded-xl border border-slate-200 bg-white p-4 text-sm">

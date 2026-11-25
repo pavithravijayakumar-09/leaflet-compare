@@ -1,52 +1,105 @@
-import type { LeafletVersion, Medication } from '../data/types'
+import { useEffect, type ReactNode } from 'react'
+import type { Medication } from '../data/types'
 import { useI18n } from '../i18n/LanguageContext'
-import { links } from '../lib/router'
-import { BackLink, CapsuleIcon, Card, CompareIcon, DocIcon, SafetyNote } from '../components/ui'
+import { compareMedication } from '../lib/compare'
+import { addSavedMed } from '../lib/storage'
+import { links, type FoundVia } from '../lib/router'
+import {
+  BackLink, BookIcon, btn, Card, CheckIcon, CompareIcon, InfoIcon, PharmacyButton, PrinterIcon, QuestionIcon, SafetyNote, SpeakerIcon, StepsIcon,
+} from '../components/ui'
+import { ProductCard } from '../components/ProductCard'
 
-export function Overview({ med }: { med: Medication }) {
-  const { t } = useI18n()
+/*
+ * Product page.
+ *  - Found by typing or blister photo → "Is this your medicine?" (explicit confirmation)
+ *  - Found by barcode → exact match, shown directly (implicit confirmation)
+ * Then: leaflet version + last revised date (UC2/UC3 "is it up to date?"),
+ * changes first if there is a newer version (UC3), and big buttons for every task.
+ */
+export function Overview({ med, via }: { med: Medication; via?: FoundVia }) {
+  const { t, formatDate } = useI18n()
+  const needsConfirmation = via === 'typed' || via === 'photo'
+
+  // Opening a medicine saves it on this device ("My medicines", offline copy – UC1).
+  useEffect(() => {
+    if (!needsConfirmation) addSavedMed(med.id)
+  }, [med.id, needsConfirmation])
+
+  if (needsConfirmation) {
+    return (
+      <div className="space-y-6">
+        <BackLink href={links.home()}>{t.product.back}</BackLink>
+        <Card className="space-y-5 p-5 sm:p-6">
+          <div>
+            <h1 tabIndex={-1} className="text-2xl font-bold">{t.product.confirmTitle}</h1>
+            <p className="mt-1 text-slate-600">{t.product.confirmText}</p>
+          </div>
+          <ProductCard med={med} />
+          <div className="flex flex-wrap gap-3">
+            <a href={links.overview(med.id)} className={`${btn.primary} py-4 text-lg`}>
+              <CheckIcon /> {t.product.confirmYes}
+            </a>
+            <a href={links.home()} className={`${btn.secondary} py-4 text-lg`}>{t.product.confirmNo}</a>
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
+  const changes = compareMedication(med)
+
   return (
     <div className="space-y-6">
-      <BackLink href={links.home()}>{t.overview.back}</BackLink>
+      <BackLink href={links.home()}>{t.product.back}</BackLink>
 
-      {/* Medication overview card */}
-      <Card className="overflow-hidden">
-        <div className="flex items-center gap-4 bg-gradient-to-r from-teal-700 to-teal-600 p-5 text-white sm:p-6">
-          <div className="grid size-14 place-items-center rounded-2xl bg-white/15">
-            <CapsuleIcon className="size-8" />
-          </div>
-          <div>
-            <h1 tabIndex={-1} className="text-2xl font-bold sm:text-3xl">
-              {med.name} {med.strength}
-            </h1>
-            <p className="text-teal-50">{med.form}</p>
-          </div>
-        </div>
-        <dl className="grid gap-x-6 gap-y-4 p-5 sm:grid-cols-3 sm:p-6">
-          <Fact label={t.overview.activeSubstance} value={med.activeIngredient} />
-          <Fact label={t.overview.prescribedFor} value={med.prescribedFor} />
-          <Fact label={t.overview.manufacturer} value={med.manufacturer} />
-        </dl>
+      {via === 'scan' && (
+        <p role="status" className="flex items-center gap-2 rounded-xl bg-teal-50 p-3 font-medium text-teal-900">
+          <CheckIcon className="size-5 text-teal-700" /> {t.product.scannedExact(med.pzn)}
+        </p>
+      )}
+
+      <Card className="p-5 sm:p-6">
+        <h1 tabIndex={-1} className="sr-only">{med.name} {med.strength}</h1>
+        <ProductCard med={med} />
       </Card>
 
-      {/* Leaflet versions */}
-      <section aria-labelledby="versions-heading" className="space-y-3">
-        <h2 id="versions-heading" className="text-xl font-semibold">{t.overview.versionsHeading}</h2>
-        <Card>
-          <ul className="divide-y divide-slate-200">
-            <VersionRow med={med} version={med.current} which="current" />
-            <VersionRow med={med} version={med.previous} which="previous" />
-          </ul>
-        </Card>
+      {/* Leaflet version and validity */}
+      <Card className="space-y-2 p-5">
+        <h2 className="text-lg font-semibold">{t.product.leafletHeading}</h2>
+        <p className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-teal-100 px-2.5 py-0.5 text-sm font-semibold text-teal-900">{t.product.version(med.current.version)}</span>
+          <span className="text-slate-700">
+            {t.product.lastUpdated}: <time dateTime={med.current.publishedOn} className="font-semibold">{formatDate(med.current.publishedOn)}</time>
+          </span>
+        </p>
+        <p className="flex items-center gap-2 text-sm text-teal-900"><CheckIcon className="size-4" /> {t.product.isCurrent}</p>
+        <p className="flex items-center gap-2 text-sm text-slate-600"><InfoIcon className="size-4" /> {t.product.savedOffline}</p>
+      </Card>
 
-        <a
-          href={links.compare(med.id)}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-teal-700 px-6 py-4 text-lg font-semibold text-white shadow-sm transition hover:bg-teal-800 sm:w-auto sm:inline-flex"
-        >
-          <CompareIcon />
-          {t.overview.compare}
-        </a>
-        <p className="text-sm text-slate-600">{t.overview.compareHint(med.previous.version, med.current.version)}</p>
+      {/* UC3: newer version → show changes first */}
+      {med.previous && changes.length > 0 && (
+        <section aria-labelledby="new-version" className="space-y-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-5">
+          <h2 id="new-version" className="flex items-center gap-2 text-lg font-bold text-amber-950">
+            <InfoIcon className="size-6" /> {t.product.newVersionTitle}
+          </h2>
+          <p className="text-amber-950">{t.product.newVersionText(changes.length, formatDate(med.previous.publishedOn))}</p>
+          <a href={links.compare(med.id)} className={`${btn.primary} py-4 text-lg`}>
+            <CompareIcon /> {t.product.showChanges}
+          </a>
+        </section>
+      )}
+
+      <section aria-labelledby="actions-heading" className="space-y-3">
+        <h2 id="actions-heading" className="text-xl font-semibold">{t.product.actionsHeading}</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Action href={links.leaflet(med.id)} icon={<BookIcon className="size-7" />} {...t.product.actions.read} />
+          <Action href={links.listen(med.id)} icon={<SpeakerIcon className="size-7" />} {...t.product.actions.listen} />
+          {med.steps.length > 0 && <Action href={links.steps(med.id)} icon={<StepsIcon className="size-7" />} {...t.product.actions.steps} />}
+          <Action href={links.ask(med.id)} icon={<QuestionIcon className="size-7" />} {...t.product.actions.ask} />
+          {med.previous && <Action href={links.compare(med.id)} icon={<CompareIcon className="size-7" />} {...t.product.actions.compare} />}
+          <Action href={links.print(med.id)} icon={<PrinterIcon className="size-7" />} {...t.product.actions.print} />
+        </div>
+        <PharmacyButton className={`${btn.secondary} w-full py-4 text-lg sm:w-auto`} />
       </section>
 
       <SafetyNote />
@@ -54,44 +107,14 @@ export function Overview({ med }: { med: Medication }) {
   )
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function Action({ href, icon, title, text }: { href: string; icon: ReactNode; title: string; text: string }) {
   return (
-    <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt>
-      <dd className="mt-0.5 font-medium">{value}</dd>
-    </div>
-  )
-}
-
-function VersionRow({ med, version, which }: { med: Medication; version: LeafletVersion; which: 'current' | 'previous' }) {
-  const { t, formatDate } = useI18n()
-  const isCurrent = which === 'current'
-  const label = isCurrent ? t.overview.current : t.overview.previous
-  return (
-    <li className="flex flex-wrap items-center gap-3 p-4 sm:p-5">
-      <DocIcon className={`size-6 ${isCurrent ? 'text-teal-700' : 'text-slate-400'}`} />
-      <div className="min-w-0 flex-1">
-        <p className="flex flex-wrap items-center gap-2 font-semibold">
-          {label}
-          <span
-            className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-              isCurrent ? 'bg-teal-100 text-teal-900' : 'bg-slate-100 text-slate-700'
-            }`}
-          >
-            {t.overview.version(version.version)}
-          </span>
-        </p>
-        <p className="text-sm text-slate-600">
-          {t.overview.published} <time dateTime={version.publishedOn}>{formatDate(version.publishedOn)}</time>
-        </p>
-      </div>
-      <a
-        href={links.leaflet(med.id, which)}
-        aria-label={t.overview.readAria(label)}
-        className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-800 hover:border-teal-600 hover:text-teal-800"
-      >
-        {t.overview.read}
-      </a>
-    </li>
+    <a href={href} className="group flex min-h-20 items-center gap-4 rounded-2xl border-2 border-slate-200 bg-white p-4 shadow-sm transition hover:border-teal-600 hover:shadow-md">
+      <span className="grid size-14 shrink-0 place-items-center rounded-xl bg-teal-700 text-white">{icon}</span>
+      <span>
+        <span className="block text-lg font-semibold text-slate-900 group-hover:text-teal-900">{title}</span>
+        <span className="block text-sm text-slate-600">{text}</span>
+      </span>
+    </a>
   )
 }
